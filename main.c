@@ -1,5 +1,10 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <Imlib2.h>
+#include <string.h>
+
 /*
-Image scaler & border adder.
+Image scaler & Border adder
 Copyright (C) 2009 Aleksi Räsänen <aleksi.rasanen@runosydan.net>
 
 This program is free software: you can redistribute it and/or modify
@@ -15,87 +20,89 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-
-#include <gtk/gtk.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 int main( int argc, char *argv[] )
 {
-	if( argc < 6 )
+	Imlib_Image input_image;
+	Imlib_Image output_image;
+
+	int input_width, input_height;
+	int output_width, output_height;
+	int border_left, border_right, border_top, border_bottom;
+	int color_red, color_green, color_blue, color_alpha;
+
+	if( argc != 12 ) 
 	{
-		printf( "Usage: %s image width height ", argv[0] );
-		printf( "border_width border_color (hex value)\n" );
+		printf( "Usage: %s INPUT OUTPUT WIDTH HEIGHT ", argv[0] );
+		printf( "LEFT_BORDER_WIDTH RIGHT_BORDER_WIDTH " );
+		printf( "TOP_BORDER_WIDTH BOTTOM_BORDER_WIDTH " );
+		printf( "COLOR_RED COLOR_GREEN COLOR_BLUE " );
 		exit(1);
 	}
 
-	gtk_init( &argc, &argv );
+	// Output image dimensions are read from CLI args.
+	output_width = atoi( argv[3] );
+	output_height = atoi( argv[4] );
 
-	GdkPixbuf *pb;
-	GdkPixbuf *new_pb;
-	 GdkPixbufFormat *info;
+	// Border size must be read from CLI arg too.
+	border_left = atoi( argv[5] );
+	border_right = atoi( argv[6] );
+	border_top = atoi( argv[7] );
+	border_bottom = atoi( argv[8] );
 
-	int width, height, border_width;
-	int original_width, original_height;
-	guint32 border_color;
+	// Read border color RGB from CLI.
+	color_red = atoi( argv[9] );
+	color_green = atoi( argv[10] );
+	color_blue = atoi( argv[11] );
+	color_alpha = 255;
 
-	// Final image width and heigth WIHOUT borders.
-	width = atoi( argv[2] );
-	height = atoi( argv[3] );
-	border_width = atoi( argv[4] );
+	// Load image
+	input_image = imlib_load_image( argv[1] );
 
-	// Read input image dimensions
-	info = gdk_pixbuf_get_file_info( argv[1], 
-		&original_width, &original_height );
-
-	// Swap width and height in output image dimensions
-	// if height is greater than width.
-	if( original_height > original_width )
+	if(! input_image )
 	{
-		int tmp = width;
-		width = height;
-		height = tmp;
-	}
-
-
-	// Convert fifth param (hex color) to unsigned long.
-	char *pEnd = NULL;
-	border_color = strtoul( argv[5], &pEnd, 0 );
-
-	// Allocate enough memory for output filename string.
-	char *output = malloc( strlen( argv[1] ) + 5 );
-	GError *error = NULL;
-
-	if( output == NULL )
-	{
-		printf( "Failed to malloc!\n" );
+		printf( "Failed to load image %s\n", argv[1] );
 		exit(1);
 	}
 
-	// Create output filename
-	sprintf( output, "new_%s", argv[1] );
+	// Read original image size
+	imlib_context_set_image( input_image );
+	input_width = imlib_image_get_width();
+	input_height = imlib_image_get_height();
 
-	// Final output image pixbuf.
-	new_pb = gdk_pixbuf_new( GDK_COLORSPACE_RGB, TRUE, 8,
-		width + (2 * border_width), height + (2 * border_width) );
-	
-	// Open input image scaled.
-	pb = gdk_pixbuf_new_from_file_at_scale( argv[1], width, height,
-		FALSE, &error );
+	// Swap output width and height if image height is greater
+	// than its width.
+	if( input_height > input_width )
+	{
+		int tmp = output_height;
+		output_height = output_width;
+		output_width = tmp;
+	}
 
-	// Fill new pixbuf with given border color, so we can get 
-	// correct color for borders after we have added copied image.
-	gdk_pixbuf_fill( new_pb, border_color );
+	// Create new output image with given dimensions
+	output_image = imlib_create_image( 
+		output_width + border_left + border_right,
+		output_height + border_top + border_bottom );
 
-	// Copy scaled input to output image, but leave enough
-	// space for borders.
-	gdk_pixbuf_copy_area( pb, 0, 0, width, height, new_pb, 
-		border_width, border_width );
+	// Select image to handle
+	imlib_context_set_image( output_image );
 
-	// Save final output image.
-	gdk_pixbuf_save( new_pb, output, "jpeg", &error, "quality", 
-		"85", NULL );
+	// Set current color
+	imlib_context_set_color( color_red, color_green, color_blue, 255 );
+
+	// Fill the output image with current color
+	imlib_image_fill_rectangle( 0, 0, 
+		output_width + border_left + border_right,
+		output_height + border_top + border_bottom );
+
+	// Copy whole input image to output image
+	imlib_blend_image_onto_image( input_image, 0, 0, 0, 
+		input_width, input_height, 
+		border_left, 
+		border_top, 
+		output_width, output_height );
+
+	// Save output imge.
+	imlib_save_image( argv[2] );
 
 	return 0;
 }
